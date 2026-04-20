@@ -1,0 +1,19 @@
+{
+  "author": "",
+  "dependencies": {
+    "docx": "^9.6.0",
+    "http-proxy": "^1.18.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.624"
+  },
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "main": "index.js",
+  "name": "ecomtorials",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "version": "1.0.0"
+}

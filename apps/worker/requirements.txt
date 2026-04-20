@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-dotenv==1.0.1
+httpx==0.28.1
+anyio==4.7.0
+supabase==2.11.0
+google-api-python-client==2.156.0
+google-auth==2.37.0
+claude-agent-sdk==0.0.11
+mcp==1.2.0

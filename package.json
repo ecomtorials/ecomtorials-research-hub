@@ -1,0 +1,18 @@
+{
+  "name": "ecomtorials-research-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ecomtorials Research Hub — Web-App für Mitarbeiter, die Full/Angle/UMP-Research-Reports über die research-pipeline generieren.",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @research-hub/web dev",
+    "build:web": "pnpm --filter @research-hub/web build",
+    "dev:worker": "cd apps/worker && python -m uvicorn main:app --reload --port 8000",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}
