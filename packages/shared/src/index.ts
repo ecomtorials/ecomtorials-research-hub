@@ -1,2 +1,2 @@
-export * from './types.js';
-export * from './hmac.js';
+export * from './types';
+export * from './hmac';
