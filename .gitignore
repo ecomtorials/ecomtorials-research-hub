@@ -31,3 +31,10 @@ Thumbs.db
 
 # Pipeline output (produced at runtime)
 apps/worker/output/
+
+.vercel
+
+# Local secrets (never commit)
+*.gcp-service-account.json
+.gcp-service-account.json
+apps/worker/.gcp-service-account.json
