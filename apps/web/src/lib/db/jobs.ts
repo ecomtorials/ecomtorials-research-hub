@@ -82,8 +82,12 @@ export async function getJobSteps(jobId: string): Promise<JobStepRow[]> {
   return (data ?? []) as JobStepRow[];
 }
 
+// clients is a shared table across projects and has service-role-only RLS.
+// We check that the caller is authenticated (+ @ecomtorials.de) at the route
+// layer, then read via service role — safer than loosening the RLS policy for
+// a table other tools depend on.
 export async function listClients(): Promise<ClientRow[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from('clients')
     .select('id, name, industry, drive_folder_id, defaultPageUrl, logoUrl, isActive')
@@ -93,7 +97,7 @@ export async function listClients(): Promise<ClientRow[]> {
 }
 
 export async function getClient(clientId: string): Promise<ClientRow | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from('clients')
     .select('id, name, industry, drive_folder_id, defaultPageUrl, logoUrl, isActive')
