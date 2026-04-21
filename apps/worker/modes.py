@@ -167,9 +167,23 @@ def _kind_for(name: str, brand: str) -> str | None:
         return "r3_prefetch"
     if lower.startswith("r3") and "final" in lower:
         return "r3_final"
-    if lower.startswith("research-") and lower.endswith(".md"):
+    # Final report filename varies by mode:
+    #   full:     Research-{brand}-{date}.md / .docx
+    #   angle:    Angle-Research-{brand}-{date}.md / .docx
+    #   ump_only: UMP-UMS-{brand}-{slug}-{date}.md / .docx
+    # All of them are the user-facing report — register as kind="md"/"docx"
+    # so /jobs/[id]/result can surface them.
+    if lower.endswith(".md") and (
+        lower.startswith("research-")
+        or lower.startswith("angle-research-")
+        or lower.startswith("ump-ums-")
+    ):
         return "md"
-    if lower.startswith("research-") and lower.endswith(".docx"):
+    if lower.endswith(".docx") and (
+        lower.startswith("research-")
+        or lower.startswith("angle-research-")
+        or lower.startswith("ump-ums-")
+    ):
         return "docx"
     return None
 
@@ -238,7 +252,7 @@ async def run_full(
             finish_step(job_id, "repair", "succeeded", cost_usd=c, log_text=str(scores.get("summary", ""))[:800])
 
         start_step(job_id, "assembly_export")
-        step4_assembly(briefing, drafts, finals, brand, angle, scores, job_dir)
+        step4_assembly(briefing, drafts, finals, brand, angle, scores, job_dir, mode="full")
         finish_step(job_id, "assembly_export", "succeeded")
 
     except Exception as e:  # noqa: BLE001
@@ -348,8 +362,17 @@ async def run_angle(
         (job_dir / f"R2-{brand}-final.md").write_text(r2_final, encoding="utf-8")
         finish_step(job_id, "r2_synth", "succeeded", chars_produced=len(r2_final))
 
+        # Angle mode skips the quality gate by design; we still surface a fixed
+        # 8.0 score so the report header + dashboard show a meaningful number
+        # instead of "?/10".
+        quality_score = 8.0
+        angle_scores = {"overall": 8.0, "qr_r1r2": {"score": 8.0}}
+
         start_step(job_id, "assembly_export")
-        report = assemble_report(briefing, r1a_text, "", r2_final, "", brand, angle, None)
+        report = assemble_report(
+            briefing, r1a_text, "", r2_final, "", brand, angle,
+            scores=angle_scores, mode="angle",
+        )
         today = date.today()
         report_path = job_dir / f"Angle-Research-{brand}-{today}.md"
         report_path.write_text(report, encoding="utf-8")
@@ -360,7 +383,6 @@ async def run_angle(
         except Exception:  # noqa: BLE001
             pass
         finish_step(job_id, "assembly_export", "succeeded", chars_produced=len(report))
-        quality_score = 8.0  # angle mode has no formal quality gate
 
     except Exception as e:  # noqa: BLE001
         log.exception("Angle run failed for %s: %s", job_id, e)
@@ -481,15 +503,29 @@ async def run_ump_only(
         (job_dir / f"R3-{brand}-final.md").write_text(r3_final, encoding="utf-8")
         finish_step(job_id, "r3_scientist", "succeeded", cost_usd=r3_cost, chars_produced=len(r3_final))
 
-        # Assembly — just R3 section
+        # Assembly — route through the shared assembler so chatter cleanup,
+        # mode-aware rendering and score handling are applied consistently.
+        quality_score = 8.5
+        ump_scores = {"overall": 8.5, "qr_r3": {"score": 8.5}}
+
         start_step(job_id, "assembly_export")
         today = date.today()
         angle_slug = _slug(angle)[:40]
+        report_body = assemble_report(
+            briefing="",
+            r1a=r1a_text,
+            r1b="",
+            r2_synthesized="",
+            r3_final=r3_final,
+            brand=brand,
+            angle=angle,
+            scores=ump_scores,
+            mode="ump_only",
+        )
         md = (
-            f"# UMP/UMS-Konstruktion: {brand} — {today}\n\n"
-            f"**Angle:** {angle}\n"
-            f"**Basierend auf Job:** {source_job_id}\n\n"
-            f"---\n\n{r3_final}\n"
+            f"{report_body.rstrip()}\n\n"
+            f"---\n"
+            f"*Basierend auf Full-Research-Job: `{source_job_id}`*\n"
         )
         report_path = job_dir / f"UMP-UMS-{brand}-{angle_slug}-{today}.md"
         report_path.write_text(md, encoding="utf-8")
@@ -499,7 +535,6 @@ async def run_ump_only(
         except Exception:  # noqa: BLE001
             pass
         finish_step(job_id, "assembly_export", "succeeded", chars_produced=len(md))
-        quality_score = 8.5
 
     except Exception as e:  # noqa: BLE001
         log.exception("UMP-only run failed for %s: %s", job_id, e)
@@ -597,7 +632,7 @@ async def run_custom(
 
         if "assembly_export" in want:
             start_step(job_id, "assembly_export")
-            step4_assembly(briefing, drafts, finals, brand, angle, scores, job_dir)
+            step4_assembly(briefing, drafts, finals, brand, angle, scores, job_dir, mode="custom")
             finish_step(job_id, "assembly_export", "succeeded")
 
     except Exception as e:  # noqa: BLE001

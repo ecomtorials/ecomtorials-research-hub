@@ -629,6 +629,7 @@ def step4_assembly(
     angle: str,
     scores: dict | None,
     job_dir: Path,
+    mode: str = "full",
 ) -> Path:
     """Programmatic assembly — merge all sections + export. No agent, no cost."""
     print("\n[STEP 4] Assembly + Export (programmatic)...", file=sys.stderr)
@@ -642,6 +643,7 @@ def step4_assembly(
         brand=brand,
         angle=angle,
         scores=scores,
+        mode=mode,
     )
 
     report_name = f"Research-{brand}-{date.today()}"
