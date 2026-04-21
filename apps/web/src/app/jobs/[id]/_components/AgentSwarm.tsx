@@ -54,16 +54,28 @@ const TOOL_POS: Record<string, XY> = {
   gemini_search: { x: 880, y: 50 },
 };
 
+/**
+ * Tool names on the wire come prefixed by the MCP server, e.g.
+ * "mcp__ecomtorials-research__perplexity_pro_search". Strip the prefix
+ * so TOOL_POS lookups and icon/label matchers work on the bare tool name.
+ */
+function normalizeToolName(tool: string): string {
+  const m = tool.match(/^mcp__[^_]+(?:-[^_]+)*__(.+)$/);
+  return m && m[1] ? m[1] : tool;
+}
+
 function toolIcon(tool: string) {
-  if (tool.startsWith('perplexity')) return Search;
-  if (tool.startsWith('crossref')) return Microscope;
-  if (tool.startsWith('pubmed')) return BookOpen;
-  if (tool.startsWith('gemini')) return Sparkles;
+  const bare = normalizeToolName(tool);
+  if (bare.startsWith('perplexity')) return Search;
+  if (bare.startsWith('crossref')) return Microscope;
+  if (bare.startsWith('pubmed')) return BookOpen;
+  if (bare.startsWith('gemini')) return Sparkles;
   return FileText;
 }
 
 function toolLabel(tool: string) {
   // Short human label for activity-log entries.
+  const bare = normalizeToolName(tool);
   const m: Record<string, string> = {
     perplexity_fast_search: 'Perplexity · fast',
     perplexity_pro_search: 'Perplexity · pro',
@@ -74,7 +86,7 @@ function toolLabel(tool: string) {
     pubmed_fetch_abstract: 'PubMed · abstract',
     gemini_search: 'Gemini · grounded',
   };
-  return m[tool] ?? tool;
+  return m[bare] ?? bare;
 }
 
 // Step → AgentRole mapping for reading stepsByName. Keys are identical
@@ -181,7 +193,8 @@ export function AgentSwarm({
     const now = Date.now();
     const additions: Particle[] = fresh.map((a, i) => {
       const from = AGENT_POS[a.agent] ?? AGENT_POS.step0;
-      const toolPos = a.tool ? TOOL_POS[a.tool] : undefined;
+      const bare = a.tool ? normalizeToolName(a.tool) : undefined;
+      const toolPos = bare ? TOOL_POS[bare] : undefined;
       const to: XY = toolPos ?? { x: from.x, y: from.y - 80 };
       return {
         key: `${a.id}-${now}-${i}`,
