@@ -94,10 +94,14 @@ def _extract_chars(result: Any) -> int | None:
 
 
 def _client_drive_folder_id(client_id: str) -> str | None:
+    # NOTE: postgrest-py's .maybe_single() raises APIError on 204 No Content
+    # (supabase-community/postgrest-py#78). Use .limit(1) and read rows manually.
     sb = get_supabase()
-    resp = sb.table("clients").select("drive_folder_id").eq("id", client_id).maybe_single().execute()
-    data = getattr(resp, "data", None) or {}
-    return data.get("drive_folder_id")
+    resp = sb.table("clients").select("drive_folder_id").eq("id", client_id).limit(1).execute()
+    rows = getattr(resp, "data", None) or []
+    if not rows:
+        return None
+    return rows[0].get("drive_folder_id")
 
 
 def _upload_all_artifacts(job_id: str, job_dir: Path, brand: str) -> None:

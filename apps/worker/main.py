@@ -141,3 +141,15 @@ async def _dispatch(payload: JobPayload) -> None:
             log.error("Unknown mode: %s", payload.mode)
     except Exception as e:  # noqa: BLE001
         log.exception("Dispatch failed for job %s: %s", payload.jobId, e)
+        # Mark the row failed so the frontend stops spinning forever.
+        try:
+            from progress import mark_job_finished  # local import to avoid cycle at module load
+            mark_job_finished(
+                payload.jobId,
+                status="failed",
+                cost_usd=0.0,
+                quality_score=None,
+                error=str(e)[:500],
+            )
+        except Exception as mark_err:  # noqa: BLE001
+            log.error("Also failed to mark job %s as failed: %s", payload.jobId, mark_err)
