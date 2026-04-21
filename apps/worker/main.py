@@ -24,6 +24,12 @@ load_dotenv()
 
 from hmac_verify import HMAC_HEADER, HMAC_TIMESTAMP_HEADER, verify_signature  # noqa: E402
 from modes import run_angle, run_custom, run_full, run_ump_only  # noqa: E402
+from progress import (  # noqa: E402
+    JobCanceled,
+    clear_canceled,
+    mark_canceled,
+    mark_job_finished,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,6 +68,41 @@ async def healthz():
     return {"ok": True, "service": "research-worker"}
 
 
+async def _verify_hmac(request: Request, signature: str | None, timestamp: str | None) -> str:
+    """Shared HMAC verification — returns the raw body text for downstream parsing."""
+    secret = os.environ.get("WORKER_SHARED_SECRET")
+    if not secret:
+        raise HTTPException(500, "server not configured (missing secret)")
+    if not signature or not timestamp:
+        raise HTTPException(401, "missing signature headers")
+    raw = await request.body()
+    body_text = raw.decode("utf-8")
+    if not verify_signature(secret, timestamp, body_text, signature):
+        raise HTTPException(401, "invalid signature")
+    return body_text
+
+
+@app.post("/jobs/{job_id}/cancel", status_code=202)
+async def cancel_job(
+    job_id: str,
+    request: Request,
+    signature: str | None = Header(default=None, alias=HMAC_HEADER),
+    timestamp: str | None = Header(default=None, alias=HMAC_TIMESTAMP_HEADER),
+):
+    """Flag a running job for cancellation.
+
+    The in-memory flag is checked cooperatively at every pipeline step boundary
+    (see progress.start_step). Work already in-flight (an LLM call or tool call)
+    finishes normally before we bail out at the next checkpoint. The web API
+    also writes status=cancelled to the DB so the UI updates immediately even
+    if the worker is momentarily unreachable.
+    """
+    await _verify_hmac(request, signature, timestamp)
+    mark_canceled(job_id)
+    log.info("Cancel requested for job %s", job_id)
+    return {"canceled": True, "jobId": job_id}
+
+
 @app.post("/jobs", status_code=202)
 async def create_job(
     request: Request,
@@ -69,18 +110,7 @@ async def create_job(
     signature: str | None = Header(default=None, alias=HMAC_HEADER),
     timestamp: str | None = Header(default=None, alias=HMAC_TIMESTAMP_HEADER),
 ):
-    secret = os.environ.get("WORKER_SHARED_SECRET")
-    if not secret:
-        raise HTTPException(500, "server not configured (missing secret)")
-
-    if not signature or not timestamp:
-        raise HTTPException(401, "missing signature headers")
-
-    raw = await request.body()
-    body_text = raw.decode("utf-8")
-
-    if not verify_signature(secret, timestamp, body_text, signature):
-        raise HTTPException(401, "invalid signature")
+    body_text = await _verify_hmac(request, signature, timestamp)
 
     try:
         payload = JobPayload.model_validate_json(body_text)
@@ -139,11 +169,25 @@ async def _dispatch(payload: JobPayload) -> None:
             )
         else:
             log.error("Unknown mode: %s", payload.mode)
+    except JobCanceled:
+        log.info("Job %s cancelled cooperatively at step boundary", payload.jobId)
+        # Web API already wrote status=cancelled before calling us; still finalize
+        # finished_at so duration calculations work, and clear the in-memory flag.
+        try:
+            mark_job_finished(
+                payload.jobId,
+                status="cancelled",
+                cost_usd=0.0,
+                quality_score=None,
+                error="cancelled by user",
+            )
+        except Exception as mark_err:  # noqa: BLE001
+            log.error("Failed to finalize cancelled job %s: %s", payload.jobId, mark_err)
+        clear_canceled(payload.jobId)
     except Exception as e:  # noqa: BLE001
         log.exception("Dispatch failed for job %s: %s", payload.jobId, e)
         # Mark the row failed so the frontend stops spinning forever.
         try:
-            from progress import mark_job_finished  # local import to avoid cycle at module load
             mark_job_finished(
                 payload.jobId,
                 status="failed",
@@ -153,3 +197,4 @@ async def _dispatch(payload: JobPayload) -> None:
             )
         except Exception as mark_err:  # noqa: BLE001
             log.error("Also failed to mark job %s as failed: %s", payload.jobId, mark_err)
+        clear_canceled(payload.jobId)

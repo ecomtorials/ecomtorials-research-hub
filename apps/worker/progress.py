@@ -92,7 +92,46 @@ def mark_job_finished(job_id: str, status: JobStatus, cost_usd: float, quality_s
     )
 
 
+# ---------------------------------------------------------------------------
+# Cancellation — cooperative, checked at each step boundary.
+# ---------------------------------------------------------------------------
+class JobCanceled(Exception):
+    """Raised when a job has been marked cancelled and the pipeline should stop.
+
+    Cancellation is cooperative: the runner checks between pipeline steps via
+    start_step. Per-step work (an LLM call already in flight) is allowed to
+    finish — we only interrupt at the next checkpoint.
+    """
+
+
+_CANCELED_JOBS: set[str] = set()
+
+
+def mark_canceled(job_id: str) -> None:
+    """Flag a job as cancelled — next start_step call will raise JobCanceled."""
+    _CANCELED_JOBS.add(job_id)
+    log.info("Job %s marked cancelled (in-memory flag)", job_id)
+
+
+def is_canceled(job_id: str) -> bool:
+    return job_id in _CANCELED_JOBS
+
+
+def clear_canceled(job_id: str) -> None:
+    _CANCELED_JOBS.discard(job_id)
+
+
+def check_canceled(job_id: str) -> None:
+    """Raise JobCanceled if this job has been flagged for cancellation."""
+    if job_id in _CANCELED_JOBS:
+        raise JobCanceled(job_id)
+
+
 def start_step(job_id: str, step: StepName) -> None:
+    # Cooperative cancellation checkpoint — every step boundary is a fair
+    # point to bail out. Raises before we write a 'running' row for this step.
+    check_canceled(job_id)
+
     sb = get_supabase()
     sb.schema("research").table("job_steps").upsert(
         {
