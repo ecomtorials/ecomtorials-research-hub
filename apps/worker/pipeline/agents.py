@@ -103,24 +103,48 @@ async def drain_query(
                 # NO break — let generator exhaust
             elif isinstance(msg, AssistantMessage):
                 for block in msg.content:
+                    # one-time per-block debug so Railway tells us what block
+                    # classes actually show up (claude-agent-sdk >=0.1.48 may
+                    # use different subclasses than the duck-typed branch below)
+                    bclass = type(block).__name__
+                    btype_attr = getattr(block, "type", "<no-type>")
                     if isinstance(block, TextBlock) and block.text.strip():
                         # Collect substantial text (>50 chars, skip tool confirmations)
                         if len(block.text.strip()) > 50:
                             all_text_parts.append(block.text)
-                    elif hasattr(block, "type") and block.type == "tool_use":
-                        tool_name = getattr(block, "name", "?")
-                        tool_input = getattr(block, "input", {})
-                        short = str(tool_input)[:60]
-                        print(f"[{agent_name}] Tool: {tool_name}({short})", file=sys.stderr)
-                        emitter = _current_emitter
-                        if emitter is not None:
-                            try:
-                                emitter(agent_name, tool_name, tool_input)
-                            except Exception as emit_err:  # noqa: BLE001
-                                print(
-                                    f"[activity-emitter-error/{agent_name}] {emit_err}",
-                                    file=sys.stderr,
-                                )
+                    else:
+                        # Anything non-text: try to detect as a tool-use block.
+                        is_tool_use = (
+                            bclass in ("ToolUseBlock", "ToolUse")
+                            or (hasattr(block, "type") and block.type == "tool_use")
+                            or hasattr(block, "name") and hasattr(block, "input")
+                        )
+                        if is_tool_use:
+                            tool_name = getattr(block, "name", "?")
+                            tool_input = getattr(block, "input", {})
+                            short = str(tool_input)[:60]
+                            print(
+                                f"[{agent_name}] Tool: {tool_name}({short}) "
+                                f"[block_class={bclass}, block_type_attr={btype_attr}]",
+                                file=sys.stderr,
+                            )
+                            emitter = _current_emitter
+                            if emitter is not None:
+                                try:
+                                    emitter(agent_name, tool_name, tool_input)
+                                except Exception as emit_err:  # noqa: BLE001
+                                    print(
+                                        f"[activity-emitter-error/{agent_name}] {emit_err}",
+                                        file=sys.stderr,
+                                    )
+                        else:
+                            # Log the first unexpected block we see so we can
+                            # refine the detection if needed.
+                            print(
+                                f"[block-unknown/{agent_name}] class={bclass} "
+                                f"type_attr={btype_attr}",
+                                file=sys.stderr,
+                            )
     except Exception as e:
         if got_result:
             print(f"[WARN/{agent_name}] Ignoring post-result error: {e}", file=sys.stderr)
