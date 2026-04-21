@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getJob, getJobSteps, getClient } from '@/lib/db/jobs';
+import { listJobActivity } from '@/lib/db/activity';
 import { TopBar } from '@/components/TopBar';
 import { ModeBadge, StatusBadge } from '@/components/ModeBadge';
 import { JobProgress } from './_components/JobProgress';
@@ -16,7 +17,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const job = await getJob(id);
   if (!job) return notFound();
 
-  const [steps, client] = await Promise.all([getJobSteps(id), getClient(job.client_id)]);
+  const [steps, client, activity] = await Promise.all([
+    getJobSteps(id),
+    getClient(job.client_id),
+    listJobActivity(id, 100),
+  ]);
 
   return (
     <>
@@ -93,7 +98,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           )}
         </div>
 
-        <JobProgress jobId={job.id} initialJob={job} initialSteps={steps} />
+        <JobProgress
+          jobId={job.id}
+          initialJob={job}
+          initialSteps={steps}
+          initialActivity={activity}
+        />
       </main>
     </>
   );

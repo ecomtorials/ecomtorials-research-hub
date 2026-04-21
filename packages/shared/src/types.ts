@@ -62,3 +62,27 @@ export interface JobArtifact {
   driveFileId?: string;
   sizeBytes: number;
 }
+
+export type AgentRole =
+  | 'step0'
+  | 'r1a'
+  | 'r1b'
+  | 'r2_voc'
+  | 'r3_prefetch'
+  | 'r2_synth'
+  | 'r3_scientist'
+  | 'quality_review'
+  | 'repair'
+  | 'assembly_export';
+
+export type ActivityKind = 'agent_spawn' | 'tool_call' | 'tool_result' | 'agent_finish' | 'note';
+
+export interface ActivityRecord {
+  id: number;
+  jobId: string;
+  agent: AgentRole;
+  kind: ActivityKind;
+  tool?: string;
+  detail?: string;
+  createdAt: string;
+}
