@@ -37,7 +37,7 @@ from pipeline import (  # type: ignore  # noqa: E402
 from config import load_config  # type: ignore  # noqa: E402
 from synthesis import synthesize_r2, assemble_report  # type: ignore  # noqa: E402
 
-from pipeline.agents import activity_emitter  # type: ignore  # noqa: E402
+from agents import activity_emitter  # type: ignore  # noqa: E402
 from drive import upload_artifacts
 from progress import (
     finish_step,
