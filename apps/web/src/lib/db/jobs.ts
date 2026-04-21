@@ -44,16 +44,54 @@ export interface ClientRow {
   status: string | null;
 }
 
-export async function listJobs(limit = 25): Promise<JobRow[]> {
+export interface ListJobsFilters {
+  status?: JobStatus | 'all';
+  mode?: ResearchMode | 'all';
+  clientId?: string | 'all';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListJobsResult {
+  rows: JobRow[];
+  total: number;
+}
+
+export async function listJobs(
+  limitOrFilters: number | ListJobsFilters = 25,
+): Promise<JobRow[]> {
+  // Back-compat: old call-sites pass a number.
+  const f: ListJobsFilters =
+    typeof limitOrFilters === 'number' ? { limit: limitOrFilters } : limitOrFilters;
+  const { rows } = await listJobsPaged(f);
+  return rows;
+}
+
+export async function listJobsPaged(filters: ListJobsFilters = {}): Promise<ListJobsResult> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const limit = filters.limit ?? 25;
+  const offset = filters.offset ?? 0;
+
+  let q = supabase
     .schema('research')
     .from('jobs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(`listJobs failed: ${error.message}`);
-  return (data ?? []) as JobRow[];
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false });
+
+  if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
+  if (filters.mode && filters.mode !== 'all') q = q.eq('mode', filters.mode);
+  if (filters.clientId && filters.clientId !== 'all') q = q.eq('client_id', filters.clientId);
+  if (filters.search && filters.search.trim()) {
+    const s = filters.search.trim().replace(/[,()]/g, ' ');
+    q = q.or(`brand.ilike.%${s}%,angle.ilike.%${s}%`);
+  }
+
+  q = q.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await q;
+  if (error) throw new Error(`listJobsPaged failed: ${error.message}`);
+  return { rows: (data ?? []) as JobRow[], total: count ?? 0 };
 }
 
 export async function getJob(jobId: string): Promise<JobRow | null> {
