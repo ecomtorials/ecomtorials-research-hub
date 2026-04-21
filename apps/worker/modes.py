@@ -94,10 +94,22 @@ def _extract_chars(result: Any) -> int | None:
 
 
 def _client_drive_folder_id(client_id: str) -> str | None:
-    # NOTE: postgrest-py's .maybe_single() raises APIError on 204 No Content
-    # (supabase-community/postgrest-py#78). Use .limit(1) and read rows manually.
+    # NOTE: two things to watch:
+    # 1. postgrest-py's .maybe_single() raises APIError on 204 No Content
+    #    (supabase-community/postgrest-py#78) — we use .limit(1) instead.
+    # 2. supabase-py caches the default schema on the client instance: once
+    #    anyone calls `.schema("research")`, the cached get_supabase() client
+    #    keeps looking in research.*. Call .schema("public") explicitly so
+    #    this query lands on public.clients regardless of call order.
     sb = get_supabase()
-    resp = sb.table("clients").select("drive_folder_id").eq("id", client_id).limit(1).execute()
+    resp = (
+        sb.schema("public")
+        .table("clients")
+        .select("drive_folder_id")
+        .eq("id", client_id)
+        .limit(1)
+        .execute()
+    )
     rows = getattr(resp, "data", None) or []
     if not rows:
         return None
