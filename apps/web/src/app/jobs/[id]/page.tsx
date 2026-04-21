@@ -6,6 +6,7 @@ import { listJobActivity } from '@/lib/db/activity';
 import { TopBar } from '@/components/TopBar';
 import { ModeBadge, StatusBadge } from '@/components/ModeBadge';
 import { JobProgress } from './_components/JobProgress';
+import { CancelButton } from './_components/CancelButton';
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,17 +57,22 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 </a>
               </p>
             </div>
-            <div className="text-right text-sm">
-              {job.quality_score != null && (
+            <div className="flex flex-col items-end gap-3 text-sm">
+              <div className="text-right">
+                {job.quality_score != null && (
+                  <div>
+                    <span className="text-[var(--color-text-muted)]">Score </span>
+                    <span className="font-mono text-lg">{Number(job.quality_score).toFixed(1)}/10</span>
+                  </div>
+                )}
                 <div>
-                  <span className="text-[var(--color-text-muted)]">Score </span>
-                  <span className="font-mono text-lg">{Number(job.quality_score).toFixed(1)}/10</span>
+                  <span className="text-[var(--color-text-muted)]">Kosten </span>
+                  <span className="font-mono">${Number(job.cost_usd).toFixed(2)}</span>
                 </div>
-              )}
-              <div>
-                <span className="text-[var(--color-text-muted)]">Kosten </span>
-                <span className="font-mono">${Number(job.cost_usd).toFixed(2)}</span>
               </div>
+              {(job.status === 'queued' || job.status === 'running') && (
+                <CancelButton jobId={job.id} />
+              )}
             </div>
           </div>
 
