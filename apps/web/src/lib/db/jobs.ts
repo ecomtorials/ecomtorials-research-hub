@@ -41,9 +41,7 @@ export interface ClientRow {
   name: string;
   industry: string | null;
   drive_folder_id: string | null;
-  defaultPageUrl: string | null;
-  logoUrl: string | null;
-  isActive: boolean | null;
+  status: string | null;
 }
 
 export async function listJobs(limit = 25): Promise<JobRow[]> {
@@ -90,7 +88,7 @@ export async function listClients(): Promise<ClientRow[]> {
   const supabase = createSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from('clients')
-    .select('id, name, industry, drive_folder_id, defaultPageUrl, logoUrl, isActive')
+    .select('id, name, industry, drive_folder_id, status')
     .order('name', { ascending: true });
   if (error) throw new Error(`listClients failed: ${error.message}`);
   return (data ?? []) as ClientRow[];
@@ -100,7 +98,7 @@ export async function getClient(clientId: string): Promise<ClientRow | null> {
   const supabase = createSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from('clients')
-    .select('id, name, industry, drive_folder_id, defaultPageUrl, logoUrl, isActive')
+    .select('id, name, industry, drive_folder_id, status')
     .eq('id', clientId)
     .maybeSingle();
   if (error) throw new Error(`getClient failed: ${error.message}`);

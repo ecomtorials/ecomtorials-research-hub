@@ -57,7 +57,6 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
     const c = clients.find((x) => x.id === id);
     if (c) {
       if (!brand) setBrand(c.name);
-      if (!url && c.defaultPageUrl) setUrl(c.defaultPageUrl);
     }
   }
 
