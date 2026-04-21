@@ -2,12 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getClient, insertJob } from '@/lib/db/jobs';
 import { triggerWorker } from '@/lib/worker/client';
-import type { JobPayload, ResearchMode, PipelineStep } from '@research-hub/shared';
+import type { JobPayload, ResearchMode } from '@research-hub/shared';
 
 interface RequestBody {
   clientId?: string;
   mode?: ResearchMode;
-  customSteps?: PipelineStep[];
   sourceJobId?: string;
   url?: string;
   brand?: string;
@@ -15,7 +14,10 @@ interface RequestBody {
   angle?: string;
 }
 
-const VALID_MODES: ResearchMode[] = ['full', 'angle', 'ump_only', 'custom'];
+// `custom` is intentionally excluded: it remains in the DB enum (and the worker
+// still accepts it for direct API use) but is no longer an offered mode in the
+// UI nor valid for new jobs via this route.
+const VALID_MODES: ResearchMode[] = ['full', 'angle', 'ump_only'];
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -34,19 +36,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const { clientId, mode, url, brand, angle, productName, sourceJobId, customSteps } = body;
+  const { clientId, mode, url, brand, angle, productName, sourceJobId } = body;
 
   if (!clientId || !mode || !url || !brand || !angle) {
     return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
+  }
+  if (mode === 'custom') {
+    return NextResponse.json(
+      { error: 'custom_mode_deprecated', detail: 'Use full, angle or ump_only.' },
+      { status: 400 },
+    );
   }
   if (!VALID_MODES.includes(mode)) {
     return NextResponse.json({ error: 'invalid_mode' }, { status: 400 });
   }
   if (mode === 'ump_only' && !sourceJobId) {
     return NextResponse.json({ error: 'ump_only_requires_source_job' }, { status: 400 });
-  }
-  if (mode === 'custom' && (!customSteps || customSteps.length === 0)) {
-    return NextResponse.json({ error: 'custom_requires_steps' }, { status: 400 });
   }
 
   // Validate client exists
@@ -60,7 +65,6 @@ export async function POST(request: NextRequest) {
     clientId,
     userId: user.id,
     mode,
-    customSteps: mode === 'custom' ? customSteps : undefined,
     sourceJobId: mode === 'ump_only' ? sourceJobId : undefined,
     url,
     brand,

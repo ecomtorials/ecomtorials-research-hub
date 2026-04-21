@@ -4,27 +4,56 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
+import { Sparkles, Target, Microscope, AlertTriangle, Info, ArrowRight, Clock, DollarSign, Lock } from 'lucide-react';
 import type { ClientRow, JobRow } from '@/lib/db/jobs';
-import type { ResearchMode, PipelineStep } from '@research-hub/shared';
+import type { ResearchMode } from '@research-hub/shared';
 
-const MODE_TABS: { value: ResearchMode; label: string; hint: string }[] = [
-  { value: 'full', label: 'Full', hint: '~27 min · ~$2.77 · komplette Pipeline' },
-  { value: 'angle', label: 'Angle', hint: '~12 min · ~$1.20 · R1+R2 ohne R3' },
-  { value: 'ump_only', label: 'UMP/UMS', hint: '~7 min · ~$3.50 · nur R3 auf Basis einer Full-Research' },
-  { value: 'custom', label: 'Custom', hint: 'freie Step-Auswahl' },
-];
+type UiMode = Exclude<ResearchMode, 'custom'>;
 
-const CUSTOM_STEPS: { value: PipelineStep; label: string; requires?: PipelineStep[] }[] = [
-  { value: 'step0_scrape', label: 'Step 0: Produktscrape + Briefing' },
-  { value: 'r1a', label: 'R1a: Zielgruppe Kat. 01-13' },
-  { value: 'r1b', label: 'R1b: Zielgruppe Kat. 14-25' },
-  { value: 'r2_voc', label: 'R2: Voice of Customer' },
-  { value: 'r3_prefetch', label: 'R3-Prefetch: Studien-Crossref' },
-  { value: 'r2_synth', label: 'R2-Synth: Belief Architecture', requires: ['r1a', 'r2_voc'] },
-  { value: 'r3_scientist', label: 'R3-Scientist: UMP/UMS (Opus)', requires: ['r3_prefetch'] },
-  { value: 'quality_review', label: 'Quality Review' },
-  { value: 'repair', label: 'Targeted Repair', requires: ['quality_review'] },
-  { value: 'assembly_export', label: 'Assembly + MD/DOCX-Export' },
+interface ModeSpec {
+  value: UiMode;
+  title: string;
+  subtitle: string;
+  tagline: string;
+  duration: string;
+  cost: string;
+  icon: typeof Sparkles;
+  accent: 'cyan' | 'purple' | 'violet';
+  requiresPriorJob?: boolean;
+}
+
+const MODES: ModeSpec[] = [
+  {
+    value: 'full',
+    title: 'Full Research',
+    subtitle: 'Komplette Pipeline',
+    tagline: 'R1 Zielgruppe + R2 Voice of Customer + R3 UMP/UMS mit Quality-Gate.',
+    duration: '~27 min',
+    cost: '~$2.77',
+    icon: Sparkles,
+    accent: 'cyan',
+  },
+  {
+    value: 'angle',
+    title: 'Angle-based Research',
+    subtitle: 'Fokussiert auf einen Angle',
+    tagline: 'R1 + R2 angle-zentriert. Schnell, günstig, ohne R3.',
+    duration: '~12 min',
+    cost: '~$1.20',
+    icon: Target,
+    accent: 'purple',
+  },
+  {
+    value: 'ump_only',
+    title: 'Unique Mechanism Development',
+    subtitle: 'R3 auf bestehender Full-Research',
+    tagline: 'CrossRef-Prefetch + Opus-Scientist baut den UMP/UMS-Kern.',
+    duration: '~7 min',
+    cost: '~$3.50',
+    icon: Microscope,
+    accent: 'violet',
+    requiresPriorJob: true,
+  },
 ];
 
 export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; priorJobs: JobRow[] }) {
@@ -33,65 +62,60 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
   const [error, setError] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState<string>(clients[0]?.id ?? '');
-  const [mode, setMode] = useState<ResearchMode>('full');
+  const [mode, setMode] = useState<UiMode>('full');
   const [url, setUrl] = useState('');
   const [brand, setBrand] = useState('');
   const [productName, setProductName] = useState('');
   const [angle, setAngle] = useState('');
   const [sourceJobId, setSourceJobId] = useState<string>('');
-  const [customSteps, setCustomSteps] = useState<PipelineStep[]>([
-    'step0_scrape',
-    'r1a',
-    'r2_voc',
-    'assembly_export',
-  ]);
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === clientId) ?? null,
     [clients, clientId],
   );
 
-  // Prefill brand + URL from client on change
+  const clientPriorJobs = useMemo(
+    () => priorJobs.filter((j) => j.client_id === clientId),
+    [priorJobs, clientId],
+  );
+
+  const umpAvailable = clientPriorJobs.length > 0;
+
   function onClientChange(id: string) {
+    const previousClient = clients.find((x) => x.id === clientId);
+    const nextClient = clients.find((x) => x.id === id);
     setClientId(id);
-    const c = clients.find((x) => x.id === id);
-    if (c) {
-      if (!brand) setBrand(c.name);
-    }
-  }
-
-  const clientPriorJobs = priorJobs.filter((j) => j.client_id === clientId);
-
-  const customStepErrors: string[] = [];
-  if (mode === 'custom') {
-    for (const s of CUSTOM_STEPS) {
-      if (customSteps.includes(s.value) && s.requires) {
-        for (const req of s.requires) {
-          if (!customSteps.includes(req)) {
-            customStepErrors.push(`${s.label} benötigt: ${req}`);
-          }
-        }
+    if (nextClient) {
+      if (!brand || brand === previousClient?.name) {
+        setBrand(nextClient.name);
       }
     }
-    if (customSteps.length === 0) customStepErrors.push('Mindestens ein Step erforderlich');
+    setSourceJobId('');
+    if (mode === 'ump_only') {
+      const hasJobs = priorJobs.some((j) => j.client_id === id);
+      if (!hasJobs) setMode('full');
+    }
   }
 
-  function toggleStep(step: PipelineStep) {
-    setCustomSteps((prev) =>
-      prev.includes(step) ? prev.filter((s) => s !== step) : [...prev, step],
-    );
+  function onModeChange(next: UiMode) {
+    if (next === 'ump_only' && !umpAvailable) return;
+    setMode(next);
+    if (next !== 'ump_only') setSourceJobId('');
   }
+
+  const canSubmit =
+    !!clientId &&
+    !!url.trim() &&
+    !!brand.trim() &&
+    !!angle.trim() &&
+    (mode !== 'ump_only' || !!sourceJobId);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     if (mode === 'ump_only' && !sourceJobId) {
-      setError('Für UMP/UMS-only musst du eine vorherige Full-Research auswählen.');
-      return;
-    }
-    if (mode === 'custom' && customStepErrors.length > 0) {
-      setError(customStepErrors.join(' · '));
+      setError('Für Unique Mechanism Development musst du eine vorherige Full-Research auswählen.');
       return;
     }
 
@@ -103,7 +127,6 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
       productName: productName.trim() || undefined,
       angle: angle.trim(),
       sourceJobId: mode === 'ump_only' ? sourceJobId : undefined,
-      customSteps: mode === 'custom' ? customSteps : undefined,
     };
 
     startTransition(async () => {
@@ -124,6 +147,7 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {/* Client picker */}
       <section className="card p-6">
         <label htmlFor="client" className="block text-sm font-medium">
           Kunde
@@ -132,46 +156,134 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
           id="client"
           value={clientId}
           onChange={(e) => onClientChange(e.target.value)}
-          className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+          className="input mt-2"
         >
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
               {c.industry ? ` — ${c.industry}` : ''}
-              {!c.drive_folder_id ? ' (kein Drive-Ordner!)' : ''}
             </option>
           ))}
         </select>
         {selectedClient && !selectedClient.drive_folder_id && (
-          <p className="mt-2 text-xs text-amber-300">
-            ⚠️ Dieser Kunde hat keinen <code>drive_folder_id</code>. Der Report wird NICHT nach Drive hochgeladen — nur MD-Download verfügbar.
+          <p className="mt-3 flex items-start gap-2 text-xs text-[color:var(--color-warn)]">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Dieser Kunde hat keinen <code className="font-mono text-[11px]">drive_folder_id</code>.
+              Der Report wird nicht nach Drive hochgeladen — nur MD-Download verfügbar.
+            </span>
           </p>
         )}
       </section>
 
-      <section className="card p-6">
-        <p className="block text-sm font-medium">Modus</p>
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {MODE_TABS.map((m) => (
-            <button
-              type="button"
-              key={m.value}
-              onClick={() => setMode(m.value)}
-              className={clsx(
-                'rounded-md border px-3 py-2 text-left text-sm transition',
-                mode === m.value
-                  ? 'border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                  : 'border-[var(--color-border)] hover:bg-white/5',
-              )}
-            >
-              <div className="font-semibold">{m.label}</div>
-              <div className="mt-0.5 text-xs opacity-80">{m.hint}</div>
-            </button>
-          ))}
+      {/* Mode picker */}
+      <section>
+        <div className="mb-3 flex items-end justify-between">
+          <div>
+            <p className="text-sm font-medium">Research-Modus</p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Wähle wie tief die Research gehen soll.
+            </p>
+          </div>
+        </div>
+        <div
+          role="radiogroup"
+          aria-label="Research-Modus"
+          className="grid gap-3 sm:grid-cols-3"
+        >
+          {MODES.map((spec) => {
+            const Icon = spec.icon;
+            const selected = mode === spec.value;
+            const disabled = spec.requiresPriorJob && !umpAvailable;
+            return (
+              <button
+                key={spec.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-disabled={disabled}
+                disabled={disabled}
+                onClick={() => onModeChange(spec.value)}
+                data-selected={selected}
+                className="mode-card"
+              >
+                <div className="flex items-start justify-between">
+                  <div
+                    className={clsx(
+                      'flex h-10 w-10 items-center justify-center rounded-lg border',
+                      spec.accent === 'cyan' &&
+                        'border-cyan-400/30 bg-cyan-400/10 text-cyan-300',
+                      spec.accent === 'purple' &&
+                        'border-purple-400/30 bg-purple-400/10 text-purple-300',
+                      spec.accent === 'violet' &&
+                        'border-violet-400/30 bg-violet-400/10 text-violet-300',
+                    )}
+                  >
+                    <Icon className="h-5 w-5" strokeWidth={2} />
+                  </div>
+                  {disabled && (
+                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--color-text-subtle)]">
+                      <Lock className="h-3 w-3" /> gesperrt
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-[15px] font-semibold leading-tight">{spec.title}</div>
+                  <div className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                    {spec.subtitle}
+                  </div>
+                </div>
+                <p className="text-xs leading-relaxed text-[var(--color-text-muted)]">
+                  {spec.tagline}
+                </p>
+                <div className="flex items-center gap-3 pt-1 text-[11px] text-[var(--color-text-subtle)]">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> {spec.duration}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" /> {spec.cost}
+                  </span>
+                </div>
+                {disabled && (
+                  <p className="text-[11px] text-[var(--color-text-subtle)]">
+                    Benötigt eine abgeschlossene Full-Research für diesen Kunden.
+                  </p>
+                )}
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      <section className="card space-y-4 p-6">
+      {/* UMP source job select (inline with mode) */}
+      {mode === 'ump_only' && (
+        <section className="card p-6">
+          <label htmlFor="source" className="block text-sm font-medium">
+            Basis: vorherige Full-Research
+          </label>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            UMP/UMS wird auf R1- und R2-Artifacts dieses Jobs aufgebaut.
+          </p>
+          <select
+            id="source"
+            value={sourceJobId}
+            onChange={(e) => setSourceJobId(e.target.value)}
+            required
+            className="input mt-3"
+          >
+            <option value="">– Full-Research auswählen –</option>
+            {clientPriorJobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.brand} — {j.angle.slice(0, 60)}
+                {j.angle.length > 60 ? '…' : ''} ({new Date(j.created_at).toLocaleDateString('de-DE')})
+              </option>
+            ))}
+          </select>
+        </section>
+      )}
+
+      {/* Brief inputs */}
+      <section className="card space-y-5 p-6">
         <div>
           <label htmlFor="url" className="block text-sm font-medium">
             Produkt-URL
@@ -183,7 +295,7 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
             placeholder="https://…"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+            className="input mt-2"
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -197,19 +309,20 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
               required
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
-              className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+              className="input mt-2"
             />
           </div>
           <div>
             <label htmlFor="product" className="block text-sm font-medium">
-              Produktname <span className="text-[var(--color-text-muted)]">(optional)</span>
+              Produktname
+              <span className="ml-1 text-[var(--color-text-subtle)]">(optional)</span>
             </label>
             <input
               id="product"
               type="text"
               value={productName}
               onChange={(e) => setProductName(e.target.value)}
-              className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+              className="input mt-2"
             />
           </div>
         </div>
@@ -220,100 +333,40 @@ export function NewJobForm({ clients, priorJobs }: { clients: ClientRow[]; prior
           <textarea
             id="angle"
             required
-            rows={2}
+            rows={3}
             placeholder="z.B. Stress-Schalter — erhöhtes Cortisol bei Frauen, die alles managen müssen"
             value={angle}
             onChange={(e) => setAngle(e.target.value)}
-            className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+            className="input mt-2 resize-none"
           />
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-text-subtle)]">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              Je schärfer der Angle, desto fokussierter die Research. 1–2 Sätze mit Zielgruppe und
+              Problem.
+            </span>
+          </p>
         </div>
       </section>
 
-      {mode === 'ump_only' && (
-        <section className="card p-6">
-          <label htmlFor="source" className="block text-sm font-medium">
-            Vorherige Full-Research (als R1/R2-Quelle)
-          </label>
-          {clientPriorJobs.length === 0 ? (
-            <p className="mt-2 text-sm text-amber-300">
-              Kein abgeschlossener Job für diesen Kunden. Bitte erst eine Full-Research laufen lassen
-              oder einen anderen Modus wählen.
-            </p>
-          ) : (
-            <select
-              id="source"
-              value={sourceJobId}
-              onChange={(e) => setSourceJobId(e.target.value)}
-              required
-              className="mt-2 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
-            >
-              <option value="">– auswählen –</option>
-              {clientPriorJobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.brand} — {j.angle.slice(0, 60)}
-                  {j.angle.length > 60 ? '…' : ''} ({new Date(j.created_at).toLocaleDateString('de-DE')})
-                </option>
-              ))}
-            </select>
-          )}
-        </section>
-      )}
-
-      {mode === 'custom' && (
-        <section className="card p-6">
-          <p className="block text-sm font-medium">Steps auswählen</p>
-          <div className="mt-3 grid gap-2">
-            {CUSTOM_STEPS.map((s) => (
-              <label
-                key={s.value}
-                className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--color-border)] px-3 py-2 hover:bg-white/5"
-              >
-                <input
-                  type="checkbox"
-                  checked={customSteps.includes(s.value)}
-                  onChange={() => toggleStep(s.value)}
-                  className="mt-0.5"
-                />
-                <div>
-                  <div className="text-sm">{s.label}</div>
-                  {s.requires && (
-                    <div className="text-xs text-[var(--color-text-muted)]">
-                      Benötigt: {s.requires.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-          {customStepErrors.length > 0 && (
-            <ul className="mt-3 space-y-1 text-xs text-red-300">
-              {customStepErrors.map((e) => (
-                <li key={e}>• {e}</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
       {error && (
-        <div className="rounded-md border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-200">
-          {error}
+        <div className="flex items-start gap-2 rounded-xl border border-[color:var(--color-danger)]/40 bg-[color:var(--color-danger-soft)] p-3 text-sm text-[color:var(--color-danger)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="flex justify-end gap-3">
-        <Link
-          href="/"
-          className="rounded-md border border-[var(--color-border)] px-4 py-2 text-sm hover:bg-white/5"
-        >
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/" className="btn-secondary inline-flex">
           Abbrechen
         </Link>
         <button
           type="submit"
-          disabled={pending}
-          className="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-zinc-950 hover:brightness-110 disabled:opacity-50"
+          disabled={pending || !canSubmit}
+          className="btn-primary inline-flex items-center gap-2"
         >
           {pending ? 'Wird erstellt…' : 'Research starten'}
+          {!pending && <ArrowRight className="h-4 w-4" />}
         </button>
       </div>
     </form>

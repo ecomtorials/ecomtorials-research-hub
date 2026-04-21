@@ -11,8 +11,12 @@ export default async function NewJobPage() {
   } = await supabase.auth.getUser();
 
   const [clients, recentJobs] = await Promise.all([listClients(), listJobs(200)]);
+  // UMP/UMS can only build on a prior Full-Research, so we filter here rather than
+  // in the client component. Angle jobs don't produce the R1/R2 artifacts UMP needs.
   const succeededJobs = recentJobs.filter(
-    (j) => j.status === 'succeeded' || j.status === 'completed_with_warnings',
+    (j) =>
+      j.mode === 'full' &&
+      (j.status === 'succeeded' || j.status === 'completed_with_warnings'),
   );
 
   return (

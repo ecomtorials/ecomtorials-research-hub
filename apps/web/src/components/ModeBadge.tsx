@@ -4,15 +4,15 @@ import type { ResearchMode, JobStatus } from '@research-hub/shared';
 const MODE_LABEL: Record<ResearchMode, string> = {
   full: 'Full',
   angle: 'Angle',
-  ump_only: 'UMP/UMS',
+  ump_only: 'Unique Mechanism',
   custom: 'Custom',
 };
 
 const MODE_COLOR: Record<ResearchMode, string> = {
-  full: 'bg-cyan-950/50 text-cyan-300 border-cyan-900',
-  angle: 'bg-purple-950/50 text-purple-300 border-purple-900',
-  ump_only: 'bg-amber-950/50 text-amber-300 border-amber-900',
-  custom: 'bg-zinc-900 text-zinc-300 border-zinc-800',
+  full: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30',
+  angle: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
+  ump_only: 'bg-violet-500/10 text-violet-300 border-violet-500/30',
+  custom: 'bg-zinc-800/50 text-zinc-400 border-zinc-700',
 };
 
 export function ModeBadge({ mode }: { mode: ResearchMode }) {
@@ -29,12 +29,12 @@ export function ModeBadge({ mode }: { mode: ResearchMode }) {
 }
 
 const STATUS_COLOR: Record<JobStatus, string> = {
-  queued: 'bg-zinc-900 text-zinc-300 border-zinc-800',
-  running: 'bg-blue-950/50 text-blue-300 border-blue-900 animate-pulse',
-  succeeded: 'bg-emerald-950/50 text-emerald-300 border-emerald-900',
-  failed: 'bg-red-950/50 text-red-300 border-red-900',
-  cancelled: 'bg-zinc-900 text-zinc-400 border-zinc-800',
-  completed_with_warnings: 'bg-amber-950/50 text-amber-300 border-amber-900',
+  queued: 'bg-zinc-800/50 text-zinc-300 border-zinc-700',
+  running: 'bg-sky-500/10 text-sky-300 border-sky-500/30 animate-pulse',
+  succeeded: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+  failed: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
+  cancelled: 'bg-zinc-800/50 text-zinc-400 border-zinc-700',
+  completed_with_warnings: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
 };
 
 const STATUS_LABEL: Record<JobStatus, string> = {
