@@ -27,7 +27,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   return (
     <>
       <TopBar email={user?.email ?? undefined} />
-      <main className="mx-auto max-w-4xl px-6 py-10">
+      <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-6">
           <Link
             href="/"
