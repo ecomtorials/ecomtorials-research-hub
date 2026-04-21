@@ -46,6 +46,26 @@ def _role_from_agent_name(agent_name: str) -> AgentRole | None:
     return None
 
 
+# step_name (research.step_name enum) → agent_role (research.agent_role enum).
+# Mostly identical except step0_scrape → step0.
+_STEP_TO_ROLE: dict[str, AgentRole] = {
+    "step0_scrape": "step0",
+    "r1a": "r1a",
+    "r1b": "r1b",
+    "r2_voc": "r2_voc",
+    "r3_prefetch": "r3_prefetch",
+    "r2_synth": "r2_synth",
+    "r3_scientist": "r3_scientist",
+    "quality_review": "quality_review",
+    "repair": "repair",
+    "assembly_export": "assembly_export",
+}
+
+
+def _role_from_step(step: StepName) -> AgentRole | None:
+    return _STEP_TO_ROLE.get(step)
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -84,8 +104,10 @@ def start_step(job_id: str, step: StepName) -> None:
         on_conflict="job_id,step",
     ).execute()
     # Mirror as an activity row so the live swarm UI can highlight this agent
-    # as soon as it spawns. Step name maps 1:1 to research.agent_role.
-    _safe_insert_activity(job_id, step, "agent_spawn")
+    # as soon as it spawns.
+    role = _role_from_step(step)
+    if role is not None:
+        _safe_insert_activity(job_id, role, "agent_spawn")
 
 
 def finish_step(
@@ -112,7 +134,9 @@ def finish_step(
         on_conflict="job_id,step",
     ).execute()
     # Mirror as an activity row so the swarm UI can retire the agent orb.
-    _safe_insert_activity(job_id, step, "agent_finish", detail=log_text)
+    role = _role_from_step(step)
+    if role is not None:
+        _safe_insert_activity(job_id, role, "agent_finish", detail=log_text)
 
 
 # ---------------------------------------------------------------------------
