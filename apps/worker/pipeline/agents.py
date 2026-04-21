@@ -7,6 +7,8 @@ import json
 import os
 import sys
 import time
+from contextvars import ContextVar
+from typing import Any, Callable, Optional
 
 import anyio
 from claude_agent_sdk import (
@@ -16,6 +18,15 @@ from claude_agent_sdk import (
     ResultMessage,
     TextBlock,
     query,
+)
+
+# Optional activity emitter. Worker code may install a callback via
+# activity_emitter.set(fn) to receive (agent_name, tool_name, tool_input) on
+# every MCP tool call drain_query observes. Callback must never raise — we
+# swallow errors so instrumentation cannot kill research runs.
+ActivityEmitter = Callable[[str, str, Any], None]
+activity_emitter: ContextVar[Optional[ActivityEmitter]] = ContextVar(
+    "activity_emitter", default=None
 )
 
 
@@ -81,6 +92,15 @@ async def drain_query(
                         tool_input = getattr(block, "input", {})
                         short = str(tool_input)[:60]
                         print(f"[{agent_name}] Tool: {tool_name}({short})", file=sys.stderr)
+                        emitter = activity_emitter.get()
+                        if emitter is not None:
+                            try:
+                                emitter(agent_name, tool_name, tool_input)
+                            except Exception as emit_err:  # noqa: BLE001
+                                print(
+                                    f"[activity-emitter-error/{agent_name}] {emit_err}",
+                                    file=sys.stderr,
+                                )
     except Exception as e:
         if got_result:
             print(f"[WARN/{agent_name}] Ignoring post-result error: {e}", file=sys.stderr)
