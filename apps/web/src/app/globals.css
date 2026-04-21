@@ -32,3 +32,52 @@ body {
   border-radius: 0.75rem;
   backdrop-filter: blur(8px);
 }
+
+/* Agent Swarm — keyframes for pulses, rings, and dashed edge flow. */
+@keyframes rh-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes rh-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+@keyframes rh-dash {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.rh-pulse {
+  animation: rh-pulse 1.6s ease-in-out infinite;
+}
+.rh-ring {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: rh-ring 1.8s ease-out infinite;
+}
+.rh-ring-delay {
+  animation-delay: 0.6s;
+}
+.rh-dash {
+  animation: rh-dash 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-ring,
+  .rh-dash,
+  .rh-pulse {
+    animation: none !important;
+  }
+}
