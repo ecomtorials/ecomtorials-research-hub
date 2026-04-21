@@ -20,11 +20,31 @@ from claude_agent_sdk import (
     query,
 )
 
-# Optional activity emitter. Worker code may install a callback via
-# activity_emitter.set(fn) to receive (agent_name, tool_name, tool_input) on
-# every MCP tool call drain_query observes. Callback must never raise — we
-# swallow errors so instrumentation cannot kill research runs.
+# Optional activity emitter. Worker code installs a callback via
+# set_activity_emitter(fn); drain_query reads the module-level variable
+# and forwards every MCP tool_use block to it. We use a plain module-level
+# var instead of a ContextVar because the Claude Agent SDK internals
+# create background tasks whose contexts do not always inherit the caller's
+# ContextVar state, so the emitter never got read. Single-worker Railway
+# deployment means we run one job at a time — no concurrency hazard.
 ActivityEmitter = Callable[[str, str, Any], None]
+_current_emitter: Optional[ActivityEmitter] = None
+
+
+def set_activity_emitter(fn: Optional[ActivityEmitter]) -> Optional[ActivityEmitter]:
+    """Install the callback, return the previous one so callers can restore."""
+    global _current_emitter
+    prev = _current_emitter
+    _current_emitter = fn
+    return prev
+
+
+def get_activity_emitter() -> Optional[ActivityEmitter]:
+    return _current_emitter
+
+
+# Kept for backward compatibility with any code that may still read the
+# ContextVar; superseded by the module-level var above.
 activity_emitter: ContextVar[Optional[ActivityEmitter]] = ContextVar(
     "activity_emitter", default=None
 )
@@ -92,15 +112,8 @@ async def drain_query(
                         tool_input = getattr(block, "input", {})
                         short = str(tool_input)[:60]
                         print(f"[{agent_name}] Tool: {tool_name}({short})", file=sys.stderr)
-                        emitter = activity_emitter.get()
-                        # Keep a one-time debug line so Railway logs tell us
-                        # whether the ContextVar actually reached drain_query.
-                        if emitter is None:
-                            print(
-                                f"[activity-debug/{agent_name}] emitter not installed",
-                                file=sys.stderr,
-                            )
-                        else:
+                        emitter = _current_emitter
+                        if emitter is not None:
                             try:
                                 emitter(agent_name, tool_name, tool_input)
                             except Exception as emit_err:  # noqa: BLE001

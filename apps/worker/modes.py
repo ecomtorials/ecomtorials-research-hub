@@ -37,7 +37,7 @@ from pipeline import (  # type: ignore  # noqa: E402
 from config import load_config  # type: ignore  # noqa: E402
 from synthesis import synthesize_r2, assemble_report  # type: ignore  # noqa: E402
 
-from agents import activity_emitter  # type: ignore  # noqa: E402
+from agents import set_activity_emitter  # type: ignore  # noqa: E402
 from drive import upload_artifacts
 from progress import (
     finish_step,
@@ -197,7 +197,7 @@ async def run_full(
     # Install the activity emitter — drain_query will push tool_call events
     # to research.job_activity for every MCP call any research agent makes.
     # anyio propagates ContextVars into task-group children automatically.
-    emitter_token = activity_emitter.set(make_agent_emitter(job_id))
+    prev_emitter = set_activity_emitter(make_agent_emitter(job_id))
 
     try:
         briefing, c = await _push_progress_around(
@@ -245,7 +245,7 @@ async def run_full(
         log.exception("Full run failed for job %s: %s", job_id, e)
         error = str(e)[:1800]
     finally:
-        activity_emitter.reset(emitter_token)
+        set_activity_emitter(prev_emitter)
 
     # Upload artifacts + Drive push regardless of error (so user gets what's there)
     _upload_all_artifacts(job_id, job_dir, brand)
@@ -286,7 +286,7 @@ async def run_angle(
     error: str | None = None
     quality_score: float | None = None
 
-    emitter_token = activity_emitter.set(make_agent_emitter(job_id))
+    prev_emitter = set_activity_emitter(make_agent_emitter(job_id))
 
     try:
         briefing, c = await _push_progress_around(
@@ -366,7 +366,7 @@ async def run_angle(
         log.exception("Angle run failed for %s: %s", job_id, e)
         error = str(e)[:1800]
     finally:
-        activity_emitter.reset(emitter_token)
+        set_activity_emitter(prev_emitter)
 
     _upload_all_artifacts(job_id, job_dir, brand)
     drive_folder_url = _drive_upload_if_possible(job_id, client_id, "angle", brand, job_dir)
@@ -406,7 +406,7 @@ async def run_ump_only(
     error: str | None = None
     quality_score: float | None = None
 
-    emitter_token = activity_emitter.set(make_agent_emitter(job_id))
+    prev_emitter = set_activity_emitter(make_agent_emitter(job_id))
 
     try:
         # Fetch R1a + R1b + R2-final from the source job's artifacts (Supabase Storage)
@@ -505,7 +505,7 @@ async def run_ump_only(
         log.exception("UMP-only run failed for %s: %s", job_id, e)
         error = str(e)[:1800]
     finally:
-        activity_emitter.reset(emitter_token)
+        set_activity_emitter(prev_emitter)
 
     _upload_all_artifacts(job_id, job_dir, brand)
     drive_folder_url = _drive_upload_if_possible(job_id, client_id, "ump", brand, job_dir)
@@ -549,7 +549,7 @@ async def run_custom(
 
     want = set(steps)
 
-    emitter_token = activity_emitter.set(make_agent_emitter(job_id))
+    prev_emitter = set_activity_emitter(make_agent_emitter(job_id))
 
     try:
         if "step0_scrape" in want:
@@ -604,7 +604,7 @@ async def run_custom(
         log.exception("Custom run failed for %s: %s", job_id, e)
         error = str(e)[:1800]
     finally:
-        activity_emitter.reset(emitter_token)
+        set_activity_emitter(prev_emitter)
 
     _upload_all_artifacts(job_id, job_dir, brand)
     drive_folder_url = _drive_upload_if_possible(job_id, client_id, "custom", brand, job_dir)
