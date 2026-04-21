@@ -93,7 +93,14 @@ async def drain_query(
                         short = str(tool_input)[:60]
                         print(f"[{agent_name}] Tool: {tool_name}({short})", file=sys.stderr)
                         emitter = activity_emitter.get()
-                        if emitter is not None:
+                        # Keep a one-time debug line so Railway logs tell us
+                        # whether the ContextVar actually reached drain_query.
+                        if emitter is None:
+                            print(
+                                f"[activity-debug/{agent_name}] emitter not installed",
+                                file=sys.stderr,
+                            )
+                        else:
                             try:
                                 emitter(agent_name, tool_name, tool_input)
                             except Exception as emit_err:  # noqa: BLE001
